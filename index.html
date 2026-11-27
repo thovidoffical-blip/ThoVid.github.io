@@ -1090,16 +1090,27 @@ body.dark-mode #premium-view .settings-group{background:#202124;border-color:#44
     <button id="premium-back" type="button">Back</button>
     <h2>ThoVid Premium</h2>
     <div class="settings-group">
-      <h3>ThoVid Premium — $5/month</h3>
+      <h3>ThoVid Premium</h3>
       <p>Enjoy ThoVid without ads, a custom profile ring, and ten exclusive comment emojis.</p>
-      <p id="premium-status" aria-live="polite">Checking your subscription...</p>
-      <button id="premium-subscribe" class="site-box-primary" type="button">Subscribe for $5/month</button>
-      <p id="premium-message" role="status" style="font-size:13px;color:#666"></p>
-      <p style="font-size:12px;color:#666">Recurring monthly billing is handled by PayPal. You can manage or cancel your subscription through PayPal.</p>
+      <p><strong>$5.00 per month</strong> or <strong>$1.25 per week</strong></p>
+      <p id="premium-status" aria-live="polite">Checking your Premium status...</p>
+      <p><strong>How to pay</strong></p>
+      <p>Mail your payment to:<br><strong>50 Regent Park Blvd<br>Toronto, ON M5A 0L5<br>Canada</strong>. Include the email address on your ThoVid account or your channel username so the payment can be matched to your account.</p>
+      <label for="premium-plan"><strong>Premium plan</strong></label>
+      <select id="premium-plan" style="display:block;width:100%;max-width:300px">
+        <option value="monthly">$5.00 per month</option>
+        <option value="weekly">$1.25 per week</option>
+      </select>
+      <p id="premium-message" role="status" style="font-size:13px;color:#666">Premium is activated by an administrator after payment is received and matched to your account.</p>
     </div>
     <div id="premium-admin-tools" class="settings-group" style="display:none">
       <h3>Admin: Grant Premium</h3>
-      <p>Enter a user's email address, or a channel ID, username, or exact channel name. Admin grants last 30 days.</p>
+      <p>Enter a user's email address, or a channel ID, username, or exact channel name.</p>
+      <label for="premium-admin-plan"><strong>Grant duration</strong></label>
+      <select id="premium-admin-plan" style="display:block;width:100%;max-width:300px">
+        <option value="monthly">Monthly — 30 days</option>
+        <option value="weekly">Weekly — 7 days</option>
+      </select>
       <input id="premium-admin-target" type="text" maxlength="200" placeholder="Email or channel ID / @username" style="width:100%">
       <button id="premium-admin-grant" type="button">Grant 30 days Premium</button>
       <p id="premium-admin-message" role="status"></p>
@@ -3666,7 +3677,6 @@ async function openPremium(){
     $("premium-view").style.display="block";
     setMainTab("premium-link");
     $("premium-status").textContent="Checking your subscription...";
-    $("premium-subscribe").disabled=true;
     $("premium-admin-tools").style.display=isAdminUser()?"block":"none";
     if(isAdminUser())void loadPremiumAdminList();
     try{
@@ -3674,12 +3684,8 @@ async function openPremium(){
         if(isPremium){
             const until=premiumInfo?.expiresAt?new Date(Number(premiumInfo.expiresAt)).toLocaleString():"";
             $("premium-status").textContent="Premium is active"+(until?" · Next billing / expiry: "+until:"")+".";
-            $("premium-subscribe").textContent="Premium Active";
-            $("premium-subscribe").disabled=true;
         }else{
             $("premium-status").textContent="You do not currently have Premium.";
-            $("premium-subscribe").textContent="Subscribe for $5/month";
-            $("premium-subscribe").disabled=false;
         }
         $("premium-message").textContent="";
     }catch(e){$("premium-status").textContent="Could not check Premium status."; $("premium-message").textContent=e.message;}
@@ -3695,19 +3701,16 @@ async function closePremium(){
         restoreCurrentMainTab();
     }else showAuth();
 }
-$("premium-subscribe").onclick=async()=>{
-    const button=$("premium-subscribe");
-    button.disabled=true;
-    $("premium-message").textContent="Connecting to PayPal...";
-    try{
-        const data=await premiumApi("/premium/create-subscription",{});
-        if(!data.approvalUrl)throw new Error("PayPal did not provide an approval link.");
-        window.location.assign(data.approvalUrl);
-    }catch(error){
-        $("premium-message").textContent=error.message;
-        button.disabled=false;
-    }
-};
+// Payments are made outside ThoVid. There is no automatic checkout or renewal.
+const premiumPlanSelect=$("premium-plan");
+if(premiumPlanSelect){
+    premiumPlanSelect.onchange=()=>{
+        const plan=premiumPlanSelect.value;
+        $("premium-message").textContent=plan==="weekly"
+            ? "Selected: $1.25 per week. Mail payment to 50 Regent Park Blvd, Toronto, ON M5A 0L5, Canada and include your ThoVid email or channel username."
+            : "Selected: $5.00 per month. Mail payment to 50 Regent Park Blvd, Toronto, ON M5A 0L5, Canada and include your ThoVid email or channel username.";
+    };
+}
 
 async function loadPremiumAdminList(){
     const list=$("premium-admin-list");
@@ -3736,8 +3739,9 @@ $("premium-admin-grant").onclick=async()=>{
     button.disabled=true;
     $("premium-admin-message").textContent="Granting Premium...";
     try{
-        await premiumApi("/premium/admin-grant",{target});
-        $("premium-admin-message").textContent="Premium granted for 30 days.";
+        const plan=$("premium-admin-plan")?.value||"monthly";
+        await premiumApi("/premium/admin-grant",{target,plan});
+        $("premium-admin-message").textContent="Premium granted for "+(plan==="weekly"?"7 days.":"30 days.");
         $("premium-admin-target").value="";
     }catch(error){$("premium-admin-message").textContent=error.message;}
     finally{button.disabled=false;}
@@ -10046,17 +10050,9 @@ return
 currentUser = user;
 try{
     await refreshPremiumStatus();
-    const returnSubscriptionId=new URLSearchParams(window.location.search).get("subscription_id");
-    if(returnSubscriptionId){
-        const verify=await premiumApi("/premium/verify-subscription",{subscriptionId:returnSubscriptionId});
-        premiumInfo=verify.premium||null;
-        isPremium=!!premiumInfo?.active;
-        updatePremiumPresentation();
-        const cleanUrl=new URL(window.location.href);cleanUrl.searchParams.delete("subscription_id");cleanUrl.searchParams.delete("token");cleanUrl.searchParams.delete("PayerID");cleanUrl.searchParams.delete("premium");
-        window.history.replaceState({},document.title,cleanUrl.pathname+cleanUrl.hash);
-        showMessage(isPremium?"Welcome to ThoVid Premium!":"PayPal returned, but Premium is not active yet.");
-    }
-}catch(premiumReturnError){console.warn("Premium checkout return:",premiumReturnError.message);}
+}catch(premiumStatusError){
+    console.warn("Premium status refresh:",premiumStatusError.message);
+}
 
 try {
     // Ensure the user's Firebase record exists.
