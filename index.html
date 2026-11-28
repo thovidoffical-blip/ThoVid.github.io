@@ -861,8 +861,16 @@ body.dark-mode .home-sidebar-ad .home-sidebar-ad-content {
 .balloon{position:fixed;bottom:-120px;width:34px;height:48px;border-radius:50% 50% 48% 48%;z-index:60000;pointer-events:none;animation:balloon-rise 5s ease-in forwards}.balloon:after{content:"";position:absolute;width:1px;height:45px;background:#777;top:46px;left:17px}@keyframes balloon-rise{to{transform:translateY(-120vh) rotate(15deg);opacity:0}}
 
 #account-entry-wrap{order:3;flex:0 0 auto}
-#auth{display:none;position:fixed;inset:0;z-index:60000;background:#0008;align-items:center;justify-content:center;padding:16px}
-#auth #auth-card{width:min(400px,100%);background:#fff;color:#111;border:1px solid #bbb;padding:20px;box-shadow:0 8px 30px #0004}
+#auth{display:none;position:fixed;inset:0;z-index:60000;background:#fafafa;align-items:center;justify-content:center;padding:16px;overflow:auto}
+#auth #auth-card{width:min(440px,100%);background:#fff;color:#111;border:1px solid #bbb;padding:20px;box-shadow:none;border-radius:0}
+#auth #auth-card input{padding:8px;border-radius:0}
+#auth #auth-card button{padding:7px 12px;border-radius:0}
+#auth #auth-login-actions{display:flex;gap:6px;flex-wrap:wrap}
+#auth #auth-login-actions button{flex:1}
+#auth #auth-error{margin-top:12px}
+#auth-switch{display:flex;gap:6px;margin-top:14px}
+#auth-switch button{flex:1}
+#auth-switch button.active{background:#065fd4;color:#fff;border-color:#065fd4}
 #auth #auth-card input{display:block;width:100%;margin:10px 0}
 #auth #auth-card button{margin:4px 4px 4px 0}
 body.dark-mode #auth #auth-card{background:#202124;color:#eee;border-color:#555}
@@ -909,6 +917,320 @@ body.dark-mode #premium-view .settings-group{background:#202124;border-color:#44
  .main-tab,.main-tab-link{font-size:12px;padding:7px}
 }
 body.channels-tab-active #masthead-search-form{display:none!important}
+
+/* ThoVid classic blue authentication screen */
+#auth{
+    display:none;
+    position:fixed;
+    inset:0;
+    z-index:60000;
+    width:100%;
+    min-height:100vh;
+    min-height:100dvh;
+    margin:0;
+    padding:24px;
+    background:#065fd4 !important;
+    align-items:center;
+    justify-content:center;
+    overflow-y:auto;
+}
+#auth #auth-card{
+    display:block;
+    width:420px;
+    max-width:100%;
+    margin:auto;
+    padding:24px;
+    background:#fff !important;
+    color:#111 !important;
+    border:2px solid #003f9e !important;
+    border-radius:0 !important;
+    box-shadow:0 8px 0 rgba(0,35,100,.28) !important;
+    text-align:left;
+}
+#auth #auth-title{
+    margin:0 0 16px;
+    padding:0 0 12px;
+    color:#064fae;
+    border-bottom:2px solid #065fd4;
+    font-size:25px;
+    font-weight:700;
+    text-align:left;
+}
+#auth #auth-switch{
+    display:flex;
+    gap:0;
+    margin:0 0 16px;
+    border:1px solid #065fd4;
+}
+#auth #auth-switch button{
+    flex:1;
+    min-height:40px;
+    margin:0;
+    padding:9px 12px;
+    border:0;
+    border-right:1px solid #065fd4;
+    border-radius:0 !important;
+    background:#e8f1ff;
+    color:#064fae;
+    font:700 14px Arial,sans-serif;
+    cursor:pointer;
+}
+#auth #auth-switch button:last-child{border-right:0}
+#auth #auth-switch button.active,
+#auth #auth-login-actions button{
+    background:#065fd4 !important;
+    color:#fff !important;
+    border-color:#065fd4 !important;
+}
+#auth #auth-card input{
+    display:block;
+    width:100%;
+    height:42px;
+    margin:10px 0;
+    padding:9px 10px;
+    border:1px solid #888;
+    border-radius:0 !important;
+    background:#fff !important;
+    color:#111 !important;
+    font:15px Arial,sans-serif;
+}
+#auth #auth-login-actions{
+    display:flex;
+    gap:8px;
+    margin-top:12px;
+}
+#auth #auth-login-actions button{
+    flex:1;
+    min-height:42px;
+    margin:0;
+    padding:10px 14px;
+    border:1px solid #004aa8;
+    border-radius:0 !important;
+    font:700 15px Arial,sans-serif;
+    cursor:pointer;
+}
+#auth #auth-login-actions button:hover,
+#auth #auth-switch button.active:hover{background:#004bb5 !important}
+#auth #auth-close-btn{
+    float:right;
+    margin:-8px -8px 0 8px;
+    padding:5px 9px;
+    border:1px solid #aaa;
+    border-radius:0 !important;
+    background:#fff;
+    color:#333;
+    font-size:16px;
+}
+#auth #forgot-password{
+    display:block;
+    margin-top:13px !important;
+    padding:4px 0 !important;
+    border:0 !important;
+    background:transparent !important;
+    color:#065fd4 !important;
+    text-align:left;
+    text-decoration:underline;
+    cursor:pointer;
+}
+#auth #auth-error{
+    margin-top:12px;
+    padding:10px;
+    border:1px solid #d93025;
+    background:#fce8e6;
+    color:#b3261e;
+    font-size:13px;
+    line-height:1.45;
+    overflow-wrap:anywhere;
+}
+@media(max-width:480px){
+    #auth{padding:14px}
+    #auth #auth-card{padding:18px;width:100%}
+    #auth #auth-title{font-size:22px}
+}
+
+
+/* Exact classic ThoVid sign-in page layout from the supplied reference image. */
+#auth-extra-links,#auth-extra-divider{display:none}
+body.auth-page-open{
+  max-width:900px!important;
+  margin:0 auto!important;
+  padding:10px!important;
+  background:#fafafa!important;
+  color:#111!important;
+  font-family:Arial,sans-serif!important;
+}
+body.auth-page-open header{
+  display:block!important;
+  margin:0!important;
+  padding:0!important;
+}
+body.auth-page-open #account-entry-wrap,
+body.auth-page-open #user-area{display:none!important}
+body.auth-page-open #thovid-brand{
+  display:block!important;
+  margin:8px 0 16px!important;
+  text-align:left!important;
+  justify-content:flex-start!important;
+  font-size:30px!important;
+  line-height:1.2!important;
+}
+body.auth-page-open #thovid-logo{display:none!important}
+body.auth-page-open #thovid-name{display:inline!important}
+body.auth-page-open header>hr{display:block!important}
+body.auth-page-open #main-navigation,
+body.auth-page-open #masthead-bar-contents,
+body.auth-page-open #search-area,
+body.auth-page-open #app,
+body.auth-page-open #channel-view,
+body.auth-page-open #video-view,
+body.auth-page-open #mod-view,
+body.auth-page-open #ban-view,
+body.auth-page-open #dashboard-view,
+body.auth-page-open #settings-view,
+body.auth-page-open #premium-view,
+body.auth-page-open #playlist-view,
+body.auth-page-open #games-view,
+body.auth-page-open #game-player-view,
+body.auth-page-open #trendly-view,
+body.auth-page-open #live-stream-view{display:none!important}
+body.auth-page-open #site-legal-links{
+  display:flex!important;
+  gap:22px!important;
+  flex-wrap:wrap!important;
+  margin:0 0 12px!important;
+  padding:8px 0 11px!important;
+  border-top:1px solid #999!important;
+  border-bottom:1px solid #999!important;
+  font-size:16px!important;
+}
+body.auth-page-open #site-legal-links a,
+body.auth-page-open #auth-extra-links a{
+  color:#00e!important;
+  text-decoration:none!important;
+}
+body.auth-page-open #auth{
+  display:block!important;
+  position:static!important;
+  inset:auto!important;
+  width:100%!important;
+  min-height:0!important;
+  margin:0!important;
+  padding:0!important;
+  overflow:visible!important;
+  background:transparent!important;
+  z-index:auto!important;
+}
+body.auth-page-open #auth-card{
+  display:block!important;
+  width:100%!important;
+  max-width:none!important;
+  margin:0!important;
+  padding:0!important;
+  border:0!important;
+  box-shadow:none!important;
+  border-radius:0!important;
+  background:transparent!important;
+  color:#111!important;
+  text-align:left!important;
+}
+body.auth-page-open #auth-title{
+  margin:12px 0 8px!important;
+  padding:0!important;
+  border:0!important;
+  color:#111!important;
+  font-size:23px!important;
+  line-height:1.25!important;
+  font-weight:700!important;
+  text-align:left!important;
+}
+body.auth-page-open #auth-close-btn,
+body.auth-page-open #auth-switch{display:none!important}
+body.auth-page-open #auth-card input{
+  display:block!important;
+  width:213px!important;
+  max-width:100%!important;
+  height:36px!important;
+  margin:6px 0!important;
+  padding:7px 8px!important;
+  border:1px solid #bbb!important;
+  border-radius:0!important;
+  background:#fff!important;
+  color:#111!important;
+  font:16px Arial,sans-serif!important;
+}
+body.auth-page-open #auth-login-actions{
+  display:flex!important;
+  justify-content:flex-start!important;
+  gap:8px!important;
+  margin:6px 0 0!important;
+}
+body.auth-page-open #auth-login-actions button{
+  flex:0 0 auto!important;
+  min-height:32px!important;
+  margin:0 3px!important;
+  padding:6px 12px!important;
+  border:1px solid #bbb!important;
+  border-radius:0!important;
+  background:#fff!important;
+  color:#111!important;
+  font:14px Arial,sans-serif!important;
+}
+body.auth-page-open #signup{order:1!important}
+body.auth-page-open #login{order:2!important}
+body.auth-page-open #auth-login-actions button:hover{background:#eee!important}
+body.auth-page-open #forgot-password{
+  display:block!important;
+  margin:0!important;
+  padding:3px 0!important;
+  border:0!important;
+  background:transparent!important;
+  color:#00e!important;
+  font:16px Arial,sans-serif!important;
+  text-align:left!important;
+  text-decoration:none!important;
+}
+body.auth-page-open #auth-error{max-width:420px}
+body.auth-page-open #auth-extra-links{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:flex-start!important;
+  gap:14px!important;
+  margin:8px 0 16px!important;
+  padding:16px 0!important;
+  border-top:1px solid #999!important;
+  border-bottom:1px solid #999!important;
+  font-size:16px!important;
+}
+body.auth-page-open #auth-extra-divider{display:none!important}
+body.auth-page-open>div[style*="margin-top:25px"]{
+  width:45%!important;
+  max-width:405px!important;
+  margin:24px 0 0!important;
+  font-size:16px!important;
+}
+body.auth-page-open #site-legal-links-footer{display:none!important}
+@media(max-width:600px){
+  body.auth-page-open{padding:8px!important}
+  body.auth-page-open #thovid-brand{font-size:25px!important}
+  body.auth-page-open>div[style*="margin-top:25px"]{width:100%!important}
+  body.auth-page-open #site-legal-links{gap:14px!important}
+}
+
+
+/* Keep the classic screenshot-style Sign Up / Log In buttons: no blue fill or blue outline. */
+body.auth-page-open #auth #auth-login-actions button,
+body.auth-page-open #auth #auth-login-actions button:hover,
+body.auth-page-open #auth #auth-login-actions button:active,
+body.auth-page-open #auth #auth-login-actions button:focus,
+body.auth-page-open #auth #auth-login-actions button:focus-visible{
+  background:#fff!important;
+  color:#111!important;
+  border:1px solid #bbb!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  outline:none!important;
+  text-decoration:none!important;
+}
 </style>
 </head>
 <body>
@@ -980,7 +1302,8 @@ body.channels-tab-active #masthead-search-form{display:none!important}
 </div>
 <div id="site-legal-links" aria-label="Help and legal links">
 <a href="https://sites.google.com/view/thovid/support" target="_blank" rel="noopener noreferrer">ThoVid Support</a>
-<a href="https://sites.google.com/view/thovid/terms-of-service" target="_blank" rel="noopener noreferrer">Terms of Service</a>
+<a href="#" id="auth-games-link">Games</a>
+<a href="https://sites.google.com/view/thovid/terms-of-service" target="_blank" rel="noopener noreferrer">Terms of service</a>
 </div>
 
 <button id="notifications-btn" type="button"
@@ -1031,17 +1354,26 @@ body.channels-tab-active #masthead-search-form{display:none!important}
 <section id="auth" role="dialog" aria-modal="true" aria-labelledby="auth-title">
 <div id="auth-card">
 <button id="auth-close-btn" type="button" aria-label="Close" style="float:right">✕</button>
-<h2 id="auth-title">Log In</h2>
-<input id="email" type="email" placeholder="Email" autocomplete="email">
-<input id="password" type="password" placeholder="Password" autocomplete="current-password">
+<h2 id="auth-title">Login or Sign Up</h2>
+<div id="auth-switch" role="group" aria-label="Choose account action">
+<button id="auth-switch-login" type="button" class="active">Log In</button>
+<button id="auth-switch-signup" type="button">Sign Up</button>
+</div>
+<input id="email" type="email" placeholder="Email" autocomplete="email" aria-label="Email">
+<input id="password" type="password" placeholder="Password" autocomplete="current-password" aria-label="Password">
 <div id="auth-login-actions">
 <button id="login" type="button">Log In</button>
 <button id="signup" type="button" style="display:none">Sign Up</button>
 </div>
 <div id="auth-error" role="alert" aria-live="assertive" style="display:none;margin-top:10px;padding:10px;border:1px solid #d93025;background:#fce8e6;color:#b3261e;font-size:13px;line-height:1.45;overflow-wrap:anywhere"></div>
-<span id="forgot-password" style="color:#065fd4;cursor:pointer;display:block;margin-top:10px">Forgot password?</span>
+<button id="forgot-password" type="button" style="background:transparent;border:0;color:#065fd4;display:block;margin-top:10px;padding:4px 0">Forgot password?</button>
 </div>
 </section>
+<div id="auth-extra-links" aria-label="Additional ThoVid links">
+<a href="https://sites.google.com/view/thovid/volunteer" target="_blank" rel="noopener noreferrer">ThoVid Volunteer application program</a>
+<a href="https://sites.google.com/view/thovid/support" target="_blank" rel="noopener noreferrer">ThoVid Support</a>
+</div>
+<hr id="auth-extra-divider">
 
 <section id="search-area" style="display:none">
 <button id="search-back-btn" type="button" aria-label="Back to home" style="display:none"></button>
@@ -5904,6 +6236,17 @@ function loadPopularThisMonth(videos,channels,safeSearch=false){
     }
 }
 
+function thovidRelativeTime(timestamp){
+ const t=Number(timestamp)||Date.parse(timestamp)||0;
+ if(!t)return "just now";
+ const seconds=Math.max(0,Math.floor((Date.now()-t)/1000));
+ if(seconds<60)return seconds<=5?"just now":seconds+" seconds ago";
+ const minutes=Math.floor(seconds/60);if(minutes<60)return minutes+" minute"+(minutes===1?"":"s")+" ago";
+ const hours=Math.floor(minutes/60);if(hours<24)return hours+" hour"+(hours===1?"":"s")+" ago";
+ const days=Math.floor(hours/24);if(days<30)return days+" day"+(days===1?"":"s")+" ago";
+ const months=Math.floor(days/30);if(months<12)return months+" month"+(months===1?"":"s")+" ago";
+ const years=Math.floor(days/365);return years+" year"+(years===1?"":"s")+" ago";
+}
 function createVideoElement(v,key){
 const div=document.createElement("div");
 div.className="video";
@@ -5945,7 +6288,9 @@ if(v.madeForKids){
 
 const uploadedDate=document.createElement("div");
 uploadedDate.className="video-uploaded-date";
-uploadedDate.textContent=formatUploadedDate(v.uploaded);
+uploadedDate.textContent=v.liveStream
+ ? "Live streamed "+thovidRelativeTime(v.endedAt||v.publishedAt||v.uploaded||Date.now())
+ : formatUploadedDate(v.uploaded);
 
 const channel=document.createElement("span");
 channel.className="channel-link";
@@ -9851,25 +10196,27 @@ function openAuthDialog(mode){
     $("account-entry-menu").style.display="none";
     $("account-entry-btn").setAttribute("aria-expanded","false");
     setAuthError("");
-    $("auth").style.display="flex";
-    const isSignup=mode==="signup";
-    $("auth-title").textContent=isSignup?"Create an account":"Log In";
-    $("login").style.display=isSignup?"none":"inline-block";
-    $("signup").style.display=isSignup?"inline-block":"none";
-    $("password").autocomplete=isSignup?"new-password":"current-password";
-    $("auth").dataset.mode=mode;
+    document.body.classList.add("auth-page-open");
+    $("auth").style.display="block";
+    $("login").style.display="inline-block";
+    $("signup").style.display="inline-block";
+    $("auth-switch-login")?.classList.remove("active");
+    $("auth-switch-signup")?.classList.remove("active");
+    $("password").autocomplete="current-password";
+    $("auth").dataset.mode=mode||"login";
     $("email").focus();
 }
-function closeAuthDialog(){$("auth").style.display="none";}
-$("account-entry-btn").addEventListener("click",()=>{
-    const menu=$("account-entry-menu");
-    const opening=menu.style.display!=="block";
-    menu.style.display=opening?"block":"none";
-    $("account-entry-btn").setAttribute("aria-expanded",String(opening));
-});
+function closeAuthDialog(){
+    $("auth").style.display="none";
+    document.body.classList.remove("auth-page-open");
+}
+$("account-entry-btn").addEventListener("click",()=>openAuthDialog("login"));
+$("auth-games-link")?.addEventListener("click",event=>{event.preventDefault();closeAuthDialog();$("games-link")?.click();});
 $("open-login-btn").addEventListener("click",()=>openAuthDialog("login"));
 $("open-signup-btn").addEventListener("click",()=>openAuthDialog("signup"));
 $("auth-close-btn").addEventListener("click",closeAuthDialog);
+$("auth-switch-login").addEventListener("click",()=>openAuthDialog("login"));
+$("auth-switch-signup").addEventListener("click",()=>openAuthDialog("signup"));
 $("email").addEventListener("input",()=>setAuthError(""));
 $("password").addEventListener("input",()=>setAuthError(""));
 $("auth").addEventListener("click",event=>{if(event.target===$("auth"))closeAuthDialog();});
@@ -9887,7 +10234,8 @@ $("signup").onclick=async()=>{
     const pass=$("password").value;
 
     if(!email||!pass){
-        return showMessage("Please enter your email and password.");
+        setAuthError("Enter both your email address and password.");
+        return;
     }
 
     try{
@@ -9902,9 +10250,9 @@ $("signup").onclick=async()=>{
         closeAuthDialog();
         showMessage("Account created. Please enter your birth date to finish setting up your account.");
     }catch(e){
-        showSiteBox("Sign Up Failed",friendlyAuthError(e),[
-            {text:"OK",className:"site-box-primary",action:closeSiteBox}
-        ]);
+        console.warn("ThoVid signup failed:",e);
+        setAuthError(friendlyAuthError(e));
+        $("password").focus();
     }
 };
 
@@ -9913,9 +10261,8 @@ const email=$("email").value.trim();
 const pass=$("password").value;
 
 if(!email||!pass){
-return showMessage(
-"Please enter your email and password."
-)
+setAuthError("Enter both your email address and password.");
+return;
 }
 
 try{
@@ -11360,10 +11707,29 @@ thovid$("live-chat-form").addEventListener("submit",async e=>{e.preventDefault()
  try{const item=push(ref(db,"liveChats/"+thovidLiveId));await set(item,{uid:currentUser.uid,name:(currentUser.email||"Viewer").split("@")[0].slice(0,60),text:msg.slice(0,400),at:Date.now()});field.value="";}catch(err){showMessage("Chat could not send: "+err.message);}});
 function thovidDirectory(){thovidDirectoryUnsub?.();thovidDirectoryUnsub=onValue(ref(db,"activeLiveStreams"),snap=>{const holder=thovid$("live-directory");holder.replaceChildren();const rows=Object.entries(snap.val()||{}).filter(([id,x])=>x&&x.active).sort((a,b)=>Number(b[1].startedAt||0)-Number(a[1].startedAt||0));
  if(!rows.length){holder.innerHTML='<p class="empty">No one is live right now.</p>';return;}
- for(const [id,v] of rows){const card=document.createElement("article");card.className="video live-card";card.style.display="block";const img=document.createElement("img");img.className="thumbnail";img.style.width="100%";img.style.height="auto";img.style.aspectRatio="16/9";img.src=v.thumbnail||NO_THUMBNAIL;img.onerror=()=>img.src=NO_THUMBNAIL;const badge=document.createElement("span");badge.className="live-card-badge";badge.textContent="● LIVE";const title=document.createElement("h3");title.className="video-title";title.textContent=v.title||"Live stream";const meta=document.createElement("div");meta.className="video-meta";meta.textContent="Watch now · Live chat";card.append(img,badge,title,meta);card.tabIndex=0;card.setAttribute("role","button");card.setAttribute("aria-label","Watch "+title.textContent);card.onclick=()=>thovidOpenLive(id);card.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();thovidOpenLive(id);}};holder.append(card);}
+ for(const [id,v] of rows){const card=document.createElement("article");card.className="video live-card";card.style.display="block";const img=document.createElement("img");img.className="thumbnail";img.style.width="100%";img.style.height="auto";img.style.aspectRatio="16/9";img.src=v.thumbnail||NO_THUMBNAIL;img.onerror=()=>{img.onerror=null;img.src=NO_THUMBNAIL;};const badge=document.createElement("span");badge.className="live-card-badge";badge.textContent="● LIVE";const title=document.createElement("h3");title.className="video-title";title.textContent=v.title||"Live stream";const meta=document.createElement("div");meta.className="video-meta";meta.textContent="Watch now · Live chat";card.append(img,badge,title,meta);card.tabIndex=0;card.setAttribute("role","button");card.setAttribute("aria-label","Watch "+title.textContent);card.onclick=()=>thovidOpenLive(id);card.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();thovidOpenLive(id);}};holder.append(card);}
  },err=>{thovid$("live-directory").textContent="Could not load live streams. Check Firebase rules: "+err.message;});}
 function thovidAttachIce(pc,peer){pc.onicecandidate=e=>{if(e.candidate)thovidSend({type:"signal",to:peer,data:{type:"ice",candidate:e.candidate}});};}
+function thovidMakeFallbackLiveThumbnail(){
+ // The live composition canvas is already rendering the actual stream. Capture it
+ // when the creator did not upload a custom thumbnail, so the live card is never blank.
+ try{
+  if(thovidCanvas&&thovidCanvas.width&&thovidCanvas.height){
+   const thumbCanvas=document.createElement("canvas");thumbCanvas.width=640;thumbCanvas.height=360;
+   const ctx=thumbCanvas.getContext("2d");if(!ctx)return "";
+   ctx.fillStyle="#202124";ctx.fillRect(0,0,640,360);
+   ctx.drawImage(thovidCanvas,0,0,640,360);
+   return thumbCanvas.toDataURL("image/jpeg",.58);
+  }
+ }catch(err){console.warn("Could not capture automatic live thumbnail:",err);}
+ return "";
+}
 async function thovidConnectPublisher(){
+ // A file:// page has origin "null" and cannot pass authenticated CORS preflight.
+ // Stop here with a useful message instead of generating four misleading failures.
+ if(location.origin==="null"){
+  throw new Error("Open ThoVid from its HTTPS website (for example https://thovid58.github.io), not by double-clicking the HTML file. Local file pages have origin 'null' and livestream servers reject them.");
+ }
  const token=await currentUser.getIdToken();
  let lastError=null;
  for(const server of THOVID_LIVE_SERVERS){
@@ -11398,7 +11764,8 @@ async function thovidConnectPublisher(){
    console.warn("ThoVid livestream server failed; trying backup:",server,e);
   }
  }
- throw new Error("All 4 livestream servers failed. Last error: "+(lastError?.message||"Unknown connection error")+". Check that all four Render services are running and allow CORS from https://thovid58.github.io.");
+ const detail=lastError?.message||"Unknown connection error";
+ throw new Error("Could not connect to any of the 4 livestream servers. Last error: "+detail+". This cannot be fixed in the HTML alone: each Render server must return Access-Control-Allow-Origin for https://thovid58.github.io and allow POST plus the Authorization and Content-Type headers for OPTIONS preflight. Check that all four services are running.");
 }
 async function thovidCreatePublisherPeer(viewerId){if(!viewerId||thovidPublisherPeers.has(viewerId)||!thovidLiveStream)return;const pc=new RTCPeerConnection({iceServers:THOVID_ICE_SERVERS});thovidPublisherPeers.set(viewerId,pc);thovidLiveStream.getTracks().forEach(t=>pc.addTrack(t,thovidLiveStream));thovidAttachIce(pc,viewerId);const offer=await pc.createOffer();await pc.setLocalDescription(offer);thovidSend({type:"signal",to:viewerId,data:{type:"offer",sdp:offer.sdp}});}
 async function thovidJoinViewer(streamId){
@@ -11446,9 +11813,9 @@ async function thovidJoinViewer(streamId){
   if(!connected)throw lastError||new Error("No livestream server could be reached.");
  }catch(e){thovid$("live-viewer-status").textContent="Unable to watch: "+e.message;}
 }
-async function thovidLoadThumbnail(file){if(!file){thovidThumbnail="";thovid$("live-thumbnail-preview").style.display="none";return;}
- if(!file.type.startsWith("image/")){showMessage("Select an image file for the thumbnail.");return;}
- const img=new Image();const url=URL.createObjectURL(file);try{await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url;});const canvas=document.createElement("canvas");canvas.width=640;canvas.height=360;canvas.getContext("2d").drawImage(img,0,0,640,360);thovidThumbnail=canvas.toDataURL("image/jpeg",.65);if(thovidThumbnail.length>180000)throw new Error("Thumbnail is too large. Try a smaller image.");thovid$("live-thumbnail-preview").src=thovidThumbnail;thovid$("live-thumbnail-preview").style.display="block";}catch(e){thovidThumbnail="";showMessage(e.message||"Could not read thumbnail.");}finally{URL.revokeObjectURL(url);}}
+async function thovidLoadThumbnail(file){if(!file){thovidThumbnail="";thovid$("live-thumbnail-preview").removeAttribute("src");thovid$("live-thumbnail-preview").style.display="none";return;}
+ if(!file.type||!file.type.startsWith("image/")){showMessage("Select a PNG, JPG, or WebP image for the thumbnail.");thovid$("live-thumbnail-file").value="";return;}
+ const img=new Image();const url=URL.createObjectURL(file);try{await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url;});const canvas=document.createElement("canvas");canvas.width=640;canvas.height=360;canvas.getContext("2d").drawImage(img,0,0,640,360);thovidThumbnail=canvas.toDataURL("image/jpeg",.65);if(thovidThumbnail.length>180000)throw new Error("Thumbnail is too large. Try a smaller image.");thovid$("live-thumbnail-preview").src=thovidThumbnail;thovid$("live-thumbnail-preview").style.display="block";}catch(e){thovidThumbnail="";thovid$("live-thumbnail-file").value="";thovid$("live-thumbnail-preview").removeAttribute("src");thovid$("live-thumbnail-preview").style.display="none";showMessage(e.message||"Could not read thumbnail.");}finally{URL.revokeObjectURL(url);}}
 thovid$("live-thumbnail-file").addEventListener("change",e=>thovidLoadThumbnail(e.target.files?.[0]));
 thovid$("live-screen-start").addEventListener("click",thovidEnableScreen);thovid$("live-camera-start").addEventListener("click",thovidEnableCamera);thovid$("live-microphone-start").addEventListener("click",thovidEnableMic);
 thovid$("live-camera-off").addEventListener("click",thovidToggleCamera);thovid$("live-microphone-off").addEventListener("click",thovidToggleMic);
@@ -11458,7 +11825,14 @@ thovid$("live-back").addEventListener("click",()=>{if(thovidRecorder)return show
 thovid$("live-start-recording").addEventListener("click",async()=>{if(!currentUser||!currentChannelId||!thovidLiveStream||thovidLiveBusy||thovidRecorder)return;
  thovidLiveTitle=thovid$("live-title-input").value.trim().slice(0,100);if(!thovidLiveTitle)return showMessage("Enter a title for your live stream.");thovidLiveDescription=thovid$("live-description-input").value.trim().slice(0,2000);
  if(typeof MediaRecorder==="undefined")return showMessage("This browser does not support recording. Try Chrome or Edge.");thovidLiveBusy=true;thovidStatus("Connecting to live server...");thovidUpdateControls();
- try{await thovidConnectPublisher();const mime=["video/webm;codecs=vp8,opus","video/webm;codecs=vp9,opus","video/webm"].find(t=>MediaRecorder.isTypeSupported(t));thovidRecordedChunks=[];
+ try{
+  if(!thovidThumbnail){
+   // Let the camera/screen composition paint at least one frame before capturing it.
+   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+   thovidThumbnail=thovidMakeFallbackLiveThumbnail();
+   if(thovidThumbnail){const preview=thovid$("live-thumbnail-preview");preview.src=thovidThumbnail;preview.style.display="block";}
+  }
+  await thovidConnectPublisher();const mime=["video/webm;codecs=vp8,opus","video/webm;codecs=vp9,opus","video/webm"].find(t=>MediaRecorder.isTypeSupported(t));thovidRecordedChunks=[];
  thovidRecorder=mime?new MediaRecorder(thovidLiveStream,{mimeType:mime}):new MediaRecorder(thovidLiveStream);thovidRecorder.ondataavailable=e=>{if(e.data?.size)thovidRecordedChunks.push(e.data);};thovidRecorder.onstop=()=>thovidSaveRecording();thovidRecorder.onerror=e=>console.error("Live recorder",e);thovidRecorder.start(1000);thovidLiveStartedAt=Date.now();
  await set(ref(db,"activeLiveStreams/"+thovidLiveId),{active:true,title:thovidLiveTitle,description:thovidLiveDescription,thumbnail:thovidThumbnail||"",ownerId:currentUser.uid,channelId:currentChannelId,startedAt:Date.now(),liveServer:thovidLiveServer});
  thovid$("live-share-area").style.display="block";thovid$("live-share-link").value=location.origin+location.pathname+"?live="+encodeURIComponent(thovidLiveId);thovid$("live-stop-recording").disabled=false;thovidStartChat(thovidLiveId);thovidStatus("Broadcasting live! Your stream appears under Live now.",true);
@@ -11471,12 +11845,14 @@ async function thovidSaveRecording(){const recorder=thovidRecorder;thovidRecorde
  thovid$("live-stop-recording").disabled=true;const blob=new Blob(thovidRecordedChunks,{type:recorder?.mimeType||"video/webm"});thovidRecordedChunks=[];
  thovidStopMedia();if(!blob.size){thovidStatus("Stream ended. No recording was captured.");return;}
  thovidLiveBusy=true;thovid$("live-upload-progress").style.display="block";thovid$("live-upload-progress-bar").style.width="0%";thovid$("live-upload-text").textContent="Preparing recording...";
- const url=URL.createObjectURL(blob);try{if(blob.size>1024*1024*1024)throw new Error("Recording is over 1 GB.");const vid=document.createElement("video");vid.muted=true;vid.src=url;await new Promise((resolve,reject)=>{vid.onloadeddata=resolve;vid.onerror=()=>reject(new Error("Cannot read recording"));vid.load();});
+ const url=URL.createObjectURL(blob);try{if(blob.size>1024*1024*1024)throw new Error("Recording is over 1 GB.");const vid=document.createElement("video");vid.muted=true;vid.playsInline=true;vid.preload="auto";vid.src=url;await new Promise((resolve,reject)=>{vid.onloadedmetadata=resolve;vid.onerror=()=>reject(new Error("Cannot read recording"));vid.load();});
+ // Seek away from the first often-black frame and wait for a decoded frame.
+ if(Number.isFinite(vid.duration)&&vid.duration>0){const seekTo=Math.min(Math.max(0.5,vid.duration*0.15),Math.max(0,vid.duration-0.1));if(seekTo>0){await new Promise(resolve=>{const done=()=>resolve();vid.addEventListener("seeked",done,{once:true});try{vid.currentTime=seekTo}catch{resolve()}setTimeout(resolve,1500);});}}
  const c=document.createElement("canvas");c.width=640;c.height=360;c.getContext("2d").drawImage(vid,0,0,640,360);
  const thumbBlob=await new Promise(r=>c.toBlob(r,"image/jpeg",.85));if(!thumbBlob)throw new Error("Cannot create thumbnail");
  const videoFile=new File([blob],"thovid-live.webm",{type:blob.type}),thumbFile=new File([thumbBlob],"thovid-live-thumbnail.jpg",{type:"image/jpeg"});const form=new FormData();form.append("video",videoFile,videoFile.name);form.append("name",videoFile.name);form.append("thumbnail",thumbFile,thumbFile.name);form.append("thumbnailName",thumbFile.name);form.append("uploadId",crypto.randomUUID?.()||String(Date.now()));
  const result=await uploadToAvailableServer(form,percent=>{thovid$("live-upload-progress-bar").style.width=Math.round(percent)+"%";thovid$("live-upload-text").textContent="Uploading recording: "+Math.round(percent)+"%";});const data=result.data,serverBase=result.server.replace(/\/$/,""),fileId=data.fileId||"";if(!fileId&&!data.downloadUrl)throw new Error("No playable video URL returned.");
- const videoRef=push(ref(db,"videos"));await set(videoRef,{title:thovidLiveTitle||"Live stream",description:thovidLiveDescription||"Recorded live stream",thumbnail:thovidThumbnail||data.thumbnailPreviewUrl||"",thumbnailFileId:thovidThumbnail?"":data.thumbnailFileId||"",videoUrl:fileId?serverBase+"/stream/"+encodeURIComponent(fileId):data.downloadUrl,serverBase,driveFileId:fileId,driveUrl:data.driveUrl||"",previewUrl:data.previewUrl||"",views:0,likes:0,dislikes:0,likedBy:{},dislikedBy:{},channelId:currentChannelId,ownerId:currentUser.uid,ownerEmail:currentUser.email||"",uploaded:new Date().toISOString(),publishedAt:Date.now(),scheduledAt:null,liveStream:true,liveDurationMs:Date.now()-thovidLiveStartedAt,sourceMode:thovidLiveMode});
+ const videoRef=push(ref(db,"videos"));await set(videoRef,{title:thovidLiveTitle||"Live stream",description:thovidLiveDescription||"Recorded live stream",thumbnail:thovidThumbnail||data.thumbnailPreviewUrl||"",thumbnailFileId:thovidThumbnail?"":data.thumbnailFileId||"",videoUrl:fileId?serverBase+"/stream/"+encodeURIComponent(fileId):data.downloadUrl,serverBase,driveFileId:fileId,driveUrl:data.driveUrl||"",previewUrl:data.previewUrl||"",views:0,likes:0,dislikes:0,likedBy:{},dislikedBy:{},channelId:currentChannelId,ownerId:currentUser.uid,ownerEmail:currentUser.email||"",uploaded:new Date().toISOString(),publishedAt:Date.now(),scheduledAt:null,liveStream:true,liveStartedAt:thovidLiveStartedAt,endedAt:Date.now(),liveDurationMs:Math.max(0,Date.now()-thovidLiveStartedAt),sourceMode:thovidLiveMode});
  void thovidAiWakeAfterUpload();
  thovidStatus("Stream ended. Recording saved as a video.");thovid$("live-upload-progress-bar").style.width="100%";thovid$("live-upload-text").textContent="Recording uploaded successfully.";
  }catch(e){console.error(e);const link=document.createElement("a");link.href=url;link.download="ThoVid-"+(thovidLiveTitle||"Live").replace(/[^a-z0-9_-]/gi,"-")+".webm";document.body.append(link);link.click();link.remove();thovidStatus("Stream ended. Upload failed; backup recording downloaded. "+e.message);}
