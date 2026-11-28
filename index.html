@@ -1231,7 +1231,14 @@ body.auth-page-open #auth #auth-login-actions button:focus-visible{
   outline:none!important;
   text-decoration:none!important;
 }
-</style>
+
+.thovid-premium-badge{
+ position:absolute;top:7px;left:7px;z-index:5;
+ background:#16833b;color:#fff;padding:5px 7px;
+ font-size:10px;font-weight:700;letter-spacing:.25px;
+ border-radius:2px;pointer-events:none
+}
+\n</style>
 </head>
 <body>
 
@@ -2089,7 +2096,9 @@ const UPLOAD_SERVERS=[
 
 
 async function uploadToAvailableServer(form, onProgress) {
-    const servers = UPLOAD_SERVERS;
+    // Retry once on the same server for transient failures. The same uploadId
+    // stays in FormData, and Server 5 deduplicates completed uploads by uploadId.
+    const servers = UPLOAD_SERVERS.flatMap(server => [server, server]);
 
     const video = form.get("video");
     const fileSize = video && typeof video.size === "number"
@@ -2146,9 +2155,8 @@ async function uploadToAvailableServer(form, onProgress) {
 
                 xhr.onload = () => {
                     if (xhr.status < 200 || xhr.status >= 300) {
-                        reject(
-                            new Error("HTTP " + xhr.status)
-                        );
+                        const body=String(xhr.responseText||"").slice(0,500);
+                        reject(new Error("HTTP "+xhr.status+(body?": "+body:"")));
                         return;
                     }
 
@@ -2214,8 +2222,14 @@ async function uploadToAvailableServer(form, onProgress) {
             lastError = error;
 
             if (requestBodySent) {
+                const retryable = /HTTP (408|425|429|5\d\d)|Network error|timed out/i.test(error.message);
+                const nextIsSameServer = servers[i + 1] === server;
+                if (retryable && nextIsSameServer) {
+                    console.warn("ThoVid: retrying the same uploadId on the same server after a transient response:", error.message);
+                    continue;
+                }
                 throw new Error(
-                    "The server received the full video but did not confirm completion. ThoVid stopped the automatic retry to prevent duplicate uploads. Check whether the video was saved before trying again. Details: " +
+                    "The server received the full video but did not confirm completion. ThoVid stopped retrying to avoid creating another upload. Details: " +
                     error.message
                 );
             }
@@ -2232,29 +2246,41 @@ throw new Error(
 const NO_THUMBNAIL="data:image/svg+xml;charset=UTF-8,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90"><rect width="160" height="90" fill="#ddd"/><text x="80" y="48" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" fill="#555">No Thumbnail</text></svg>');
 
 function loadThumbnailWithServerFallback(img,video){
-    // Use the server thumbnail URL directly as an <img> source. The server
-    // redirects older thumbnail IDs to Google Drive; an image element can
-    // display that cross-origin image without fetch/CORS permission.
     const thumbnailId = String(video?.thumbnailFileId || "").trim();
     const savedThumbnail = String(video?.thumbnail || "").trim();
-    const serverBases = [
-        video?.serverBase,
-        ...(Array.isArray(UPLOAD_SERVERS) ? UPLOAD_SERVERS : [])
-    ].filter(Boolean).map(value => String(value).replace(/\/$/, ""));
-    const uniqueBases = [...new Set(serverBases)];
     const candidates = [];
 
+    // Prefer embedded or non-Drive image URLs. Old Drive URLs are routed
+    // through our proxy so a deleted image receives a clean placeholder.
+    const savedIsDriveUrl = /^https?:\/\/(drive\.google\.com|drive\.usercontent\.google\.com)\//i.test(savedThumbnail);
+    if (savedThumbnail && !savedIsDriveUrl) candidates.push(savedThumbnail);
+
     if (thumbnailId) {
-        for (const base of uniqueBases) {
-            candidates.push(base + "/thumbnail/" + encodeURIComponent(thumbnailId));
+        const bases = [...new Set([
+            video?.serverBase,
+            ...(Array.isArray(UPLOAD_SERVERS) ? UPLOAD_SERVERS : [])
+        ].filter(Boolean).map(value => String(value).replace(/\/$/, "")))];
+        for (const base of bases) {
+            const proxy = base + "/thumbnail/" + encodeURIComponent(thumbnailId);
+            if (!candidates.includes(proxy)) candidates.push(proxy);
         }
-    }
-    if (savedThumbnail && !candidates.includes(savedThumbnail)) {
+    } else if (savedThumbnail && savedIsDriveUrl) {
         candidates.push(savedThumbnail);
     }
 
+    // A green Premium label is shown on the thumbnail without hiding the card.
+    if (video?.premiumOnly === true) {
+        const card = img.closest(".video");
+        if (card && !card.querySelector(".thovid-premium-badge")) {
+            card.style.position = "relative";
+            const badge = document.createElement("span");
+            badge.className = "thovid-premium-badge";
+            badge.textContent = "PREMIUM USERS ONLY";
+            card.appendChild(badge);
+        }
+    }
+
     let candidateIndex = 0;
-    img.onload = null;
     img.onerror = () => {
         candidateIndex++;
         if (candidateIndex < candidates.length) {
@@ -2264,7 +2290,6 @@ function loadThumbnailWithServerFallback(img,video){
             img.src = NO_THUMBNAIL;
         }
     };
-
     img.src = candidates.length ? candidates[0] : NO_THUMBNAIL;
 }
 
@@ -6600,6 +6625,20 @@ fileLabel.textContent="Choose a video file (maximum 1GB)";
 const desc=document.createElement("textarea");
 desc.placeholder="Description";
 
+const accessLabel=document.createElement("label");
+accessLabel.textContent="Who can watch this video?";
+accessLabel.style.display="block";
+accessLabel.style.margin="10px 0 4px";
+const videoAccess=document.createElement("select");
+videoAccess.style.display="block";
+videoAccess.style.width="100%";
+videoAccess.innerHTML='<option value="everyone">Everyone</option><option value="premium">Premium users only</option>';
+const accessHelp=document.createElement("small");
+accessHelp.textContent="Premium-only videos remain visible to everyone, but only active Premium members can play them.";
+accessHelp.style.display="block";
+accessHelp.style.color="#666";
+accessHelp.style.marginBottom="8px";
+
 const playlistLabel=document.createElement("strong");
 playlistLabel.textContent="Playlist (optional)";
 playlistLabel.style.display="block";
@@ -6881,6 +6920,8 @@ await set(r,{
 
  description:d,
 
+ premiumOnly:videoAccess.value==="premium",
+
  playlistIds:Array.from(uploadPlaylistChoices.querySelectorAll(".upload-playlist-choice:checked")).map(input=>input.value),
 
  watchSeconds:0,
@@ -6988,6 +7029,9 @@ b.append(
     file,
     fileLabel,
     desc,
+    accessLabel,
+    videoAccess,
+    accessHelp,
     playlistLabel,
     playlistHelp,
     uploadPlaylistChoices,
@@ -7293,7 +7337,7 @@ card.style.display="none"
 
 
 
-function createPlayer(video) {
+function createPlayer(video,premiumStreamTicket="") {
     const fileId = String(video?.driveFileId || "").trim();
 
     const player = document.createElement("video");
@@ -7309,30 +7353,37 @@ function createPlayer(video) {
         return player;
     }
 
-    // Reuse the shared five-server media failover list for playback.
     const availableServers = UPLOAD_SERVERS;
-
     const originalServer = String(video.serverBase || "").replace(/\/+$/, "");
     const originalVideoUrl = String(video.videoUrl || "").trim();
-
-    // Try the exact URL saved with the video first. Then try the upload host
-    // and the other configured hosts. De-duplicate URLs so one bad endpoint
-    // is never retried under two labels.
     const serverCandidates = [];
     const seenStreamUrls = new Set();
     const addCandidate = (name, url) => {
         if (!url || seenStreamUrls.has(url)) return;
-        seenStreamUrls.add(url);
-        serverCandidates.push({ name, url });
+        let finalUrl=url;
+        if(premiumStreamTicket){
+            const parsed=new URL(finalUrl,location.href);
+            parsed.searchParams.set("ticket",premiumStreamTicket);
+            finalUrl=parsed.toString();
+        }
+        if(seenStreamUrls.has(finalUrl))return;
+        seenStreamUrls.add(finalUrl);
+        serverCandidates.push({ name, url:finalUrl });
     };
 
-    addCandidate("saved video URL", originalVideoUrl);
-    if (originalServer) {
-        addCandidate("original upload server", originalServer + "/stream/" + encodeURIComponent(fileId));
+    if(video.premiumOnly===true){
+        // Premium content must never fall back to an older server that does
+        // not enforce the server-side entitlement check.
+        addCandidate("Premium stream server",availableServers[0]+"/stream/"+encodeURIComponent(fileId));
+    }else{
+        addCandidate("saved video URL", originalVideoUrl);
+        if (originalServer) {
+            addCandidate("original upload server", originalServer + "/stream/" + encodeURIComponent(fileId));
+        }
+        availableServers.forEach((server, index) => {
+            addCandidate("stream server " + (index + 1), server + "/stream/" + encodeURIComponent(fileId));
+        });
     }
-    availableServers.forEach((server, index) => {
-        addCandidate("stream server " + (index + 1), server + "/stream/" + encodeURIComponent(fileId));
-    });
 
     const serverOrder = serverCandidates;
 
@@ -7661,6 +7712,26 @@ showSiteBox(
 return
 }
 
+if(video.premiumOnly===true && !video.driveFileId){
+    return showSiteBox("Premium video unavailable","This Premium video is missing its secure media file ID. The owner needs to re-upload it.",[
+        {text:"OK",className:"site-box-primary",action:closeSiteBox}
+    ]);
+}
+
+if(video.premiumOnly===true && video.ownerId!==currentUser?.uid){
+    if(!currentUser){
+        return showSiteBox("Premium users only","Sign in with an active ThoVid Premium account to watch this video.",[
+            {text:"OK",className:"site-box-primary",action:closeSiteBox}
+        ]);
+    }
+    const activePremium=await refreshPremiumStatus();
+    if(!activePremium){
+        return showSiteBox("Premium users only","This video is available to active ThoVid Premium members only.",[
+            {text:"OK",className:"site-box-primary",action:closeSiteBox}
+        ]);
+    }
+}
+
 if(!video.driveFileId&&!video.videoUrl){
 return showSiteBox(
 "Video Unavailable",
@@ -7720,6 +7791,27 @@ await openVideo(video,key,true)
 )
 }
 
+let premiumStreamTicket="";
+if(video.premiumOnly===true && video.driveFileId){
+    try{
+        if(!currentUser)throw new Error("Sign in is required for Premium playback.");
+        const idToken=await currentUser.getIdToken();
+        const ticketResponse=await fetch(UPLOAD_SERVERS[0]+"/premium/stream-ticket",{
+            method:"POST",
+            headers:{"Authorization":"Bearer "+idToken,"Content-Type":"application/json"},
+            body:JSON.stringify({fileId:String(video.driveFileId)}),
+            cache:"no-store"
+        });
+        const ticketData=await ticketResponse.json().catch(()=>({}));
+        if(!ticketResponse.ok||!ticketData.ticket){
+            throw new Error(ticketData.error||"The Premium stream could not be authorized (HTTP "+ticketResponse.status+").");
+        }
+        premiumStreamTicket=ticketData.ticket;
+    }catch(ticketError){
+        return showMessage("Premium playback could not be authorized: "+ticketError.message);
+    }
+}
+
 markWatchedChannel(video.channelId);
 rememberVideoForRecommendations(video,key);
 
@@ -7745,7 +7837,7 @@ if(video.madeForKids){
     $("video-content").appendChild(kidsInfo);
 }
 
-const player = createPlayer(video);
+const player = createPlayer(video,premiumStreamTicket);
 currentWatchTrackerCleanup=startVideoWatchTracking(player,key);
 
 const loadError = document.createElement("div");
@@ -8671,6 +8763,7 @@ replies.className="reply-list";
 getUserChannel(c.uid)
 .then(channel=>{
 if(channel){
+void applyChannelPremiumRing(img,{ownerId:c.uid});
 user.textContent=channel.name||"Unnamed Channel";
 
 if(channel.profilePic){
@@ -8738,6 +8831,7 @@ rd.append(rh,tx);
 getUserChannel(r.uid)
 .then(channel=>{
 if(channel){
+void applyChannelPremiumRing(ri,{ownerId:r.uid});
 ru.textContent=channel.name||"Unnamed Channel";
 
 if(channel.profilePic){
@@ -10043,6 +10137,7 @@ if(!terms.every(t=>hay.includes(t)))continue;
 count++;
 const row=document.createElement("div");row.className="channel";row.style.cursor="pointer";
 const pic=document.createElement("img");pic.className="directory-profile";pic.src=c.profilePic||NO_PROFILE;pic.alt=(c.name||"Channel")+" profile picture";
+void applyChannelPremiumRing(pic,c);
 pic.onerror=()=>{if(pic.src!==NO_PROFILE)pic.src=NO_PROFILE};
 const details=document.createElement("div");details.className="directory-details";
 const title=document.createElement("strong");title.textContent=c.name||"Unnamed channel";
@@ -11861,7 +11956,7 @@ async function thovidSaveRecording(){const recorder=thovidRecorder;thovidRecorde
  const thumbBlob=await new Promise(r=>c.toBlob(r,"image/jpeg",.85));if(!thumbBlob)throw new Error("Cannot create thumbnail");
  const videoFile=new File([blob],"thovid-live.webm",{type:blob.type}),thumbFile=new File([thumbBlob],"thovid-live-thumbnail.jpg",{type:"image/jpeg"});const form=new FormData();form.append("video",videoFile,videoFile.name);form.append("name",videoFile.name);form.append("thumbnail",thumbFile,thumbFile.name);form.append("thumbnailName",thumbFile.name);form.append("uploadId",crypto.randomUUID?.()||String(Date.now()));
  const result=await uploadToAvailableServer(form,percent=>{thovid$("live-upload-progress-bar").style.width=Math.round(percent)+"%";thovid$("live-upload-text").textContent="Uploading recording: "+Math.round(percent)+"%";});const data=result.data,serverBase=result.server.replace(/\/$/,""),fileId=data.fileId||"";if(!fileId&&!data.downloadUrl)throw new Error("No playable video URL returned.");
- const videoRef=push(ref(db,"videos"));await set(videoRef,{title:thovidLiveTitle||"Live stream",description:thovidLiveDescription||"Recorded live stream",thumbnail:thovidThumbnail||data.thumbnailPreviewUrl||"",thumbnailFileId:thovidThumbnail?"":data.thumbnailFileId||"",videoUrl:fileId?serverBase+"/stream/"+encodeURIComponent(fileId):data.downloadUrl,serverBase,driveFileId:fileId,driveUrl:data.driveUrl||"",previewUrl:data.previewUrl||"",views:0,likes:0,dislikes:0,likedBy:{},dislikedBy:{},channelId:currentChannelId,ownerId:currentUser.uid,ownerEmail:currentUser.email||"",uploaded:new Date().toISOString(),publishedAt:Date.now(),scheduledAt:null,liveStream:true,liveStartedAt:thovidLiveStartedAt,endedAt:Date.now(),liveDurationMs:Math.max(0,Date.now()-thovidLiveStartedAt),sourceMode:thovidLiveMode});
+ const videoRef=push(ref(db,"videos"));await set(videoRef,{title:thovidLiveTitle||"Live stream",description:thovidLiveDescription||"Recorded live stream",thumbnail:thovidThumbnail||data.thumbnailPreviewUrl||"",thumbnailFileId:thovidThumbnail?"":data.thumbnailFileId||"",videoUrl:fileId?serverBase+"/stream/"+encodeURIComponent(fileId):data.downloadUrl,serverBase,driveFileId:fileId,driveUrl:data.driveUrl||"",previewUrl:data.previewUrl||"",premiumOnly:false,views:0,likes:0,dislikes:0,likedBy:{},dislikedBy:{},channelId:currentChannelId,ownerId:currentUser.uid,ownerEmail:currentUser.email||"",uploaded:new Date().toISOString(),publishedAt:Date.now(),scheduledAt:null,liveStream:true,liveStartedAt:thovidLiveStartedAt,endedAt:Date.now(),liveDurationMs:Math.max(0,Date.now()-thovidLiveStartedAt),sourceMode:thovidLiveMode});
  void thovidAiWakeAfterUpload();
  thovidStatus("Stream ended. Recording saved as a video.");thovid$("live-upload-progress-bar").style.width="100%";thovid$("live-upload-text").textContent="Recording uploaded successfully.";
  }catch(e){console.error(e);const link=document.createElement("a");link.href=url;link.download="ThoVid-"+(thovidLiveTitle||"Live").replace(/[^a-z0-9_-]/gi,"-")+".webm";document.body.append(link);link.click();link.remove();thovidStatus("Stream ended. Upload failed; backup recording downloaded. "+e.message);}
