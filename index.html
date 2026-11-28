@@ -11280,9 +11280,15 @@ $("trendly-back")?.addEventListener("click",()=>showMainView("app"));
 document.querySelectorAll("[data-trendly-sort]").forEach(button=>button.addEventListener("click",()=>openTrendly(button.dataset.trendlySort)));
 
 
-// ThoVid in-page livestreams. WebRTC signals through the existing Render live service;
-// Firebase Realtime Database supplies stream discovery and chat.
-const THOVID_LIVE_SERVER="https://thovidserver-3.onrender.com";
+// ThoVid livestream failover: one primary Render server followed by three backups.
+// The first server is tried first; the next server is used if a request or websocket fails.
+const THOVID_LIVE_SERVERS=[
+ "https://thovid-server.onrender.com",
+ "https://thoserver-2.onrender.com",
+ "https://thovidserver-3.onrender.com",
+ "https://thovidserver4.onrender.com"
+].map(url=>url.replace(/\/+$/,""));
+let thovidLiveServer=THOVID_LIVE_SERVERS[0];
 const THOVID_ICE_SERVERS=[{urls:"stun:stun.l.google.com:19302"}];
 let thovidLiveStream=null,thovidRecorder=null,thovidRecordedChunks=[],thovidLiveStartedAt=0;
 let thovidLiveId=null,thovidLiveSocket=null,thovidLiveBusy=false,thovidLiveMode="";
@@ -11291,7 +11297,7 @@ let thovidDrawFrame=0,thovidPublisherPeers=new Map(),thovidViewerPeer=null,thovi
 let thovidChatUnsub=null,thovidDirectoryUnsub=null,thovidThumbnail="",thovidLiveTitle="",thovidLiveDescription="",thovidVideoElement=null;
 let thovidCurrentViewerId=null,thovidPendingIce=[];
 const thovid$=id=>document.getElementById(id);
-const thovidWsUrl=()=>THOVID_LIVE_SERVER.replace(/^http/,"ws")+"/live-signal";
+const thovidWsUrl=(server=thovidLiveServer)=>server.replace(/^http/,"ws")+"/live-signal";
 function thovidStatus(text,live=false){thovid$("live-recording-status").textContent=text;thovid$("live-status").style.display=live?"inline-block":"none";}
 function thovidSend(x){if(thovidLiveSocket?.readyState===WebSocket.OPEN)thovidLiveSocket.send(JSON.stringify(x));}
 function thovidStopMedia(){if(thovidDrawFrame)cancelAnimationFrame(thovidDrawFrame);thovidDrawFrame=0;
@@ -11357,39 +11363,89 @@ function thovidDirectory(){thovidDirectoryUnsub?.();thovidDirectoryUnsub=onValue
  for(const [id,v] of rows){const card=document.createElement("article");card.className="video live-card";card.style.display="block";const img=document.createElement("img");img.className="thumbnail";img.style.width="100%";img.style.height="auto";img.style.aspectRatio="16/9";img.src=v.thumbnail||NO_THUMBNAIL;img.onerror=()=>img.src=NO_THUMBNAIL;const badge=document.createElement("span");badge.className="live-card-badge";badge.textContent="● LIVE";const title=document.createElement("h3");title.className="video-title";title.textContent=v.title||"Live stream";const meta=document.createElement("div");meta.className="video-meta";meta.textContent="Watch now · Live chat";card.append(img,badge,title,meta);card.tabIndex=0;card.setAttribute("role","button");card.setAttribute("aria-label","Watch "+title.textContent);card.onclick=()=>thovidOpenLive(id);card.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();thovidOpenLive(id);}};holder.append(card);}
  },err=>{thovid$("live-directory").textContent="Could not load live streams. Check Firebase rules: "+err.message;});}
 function thovidAttachIce(pc,peer){pc.onicecandidate=e=>{if(e.candidate)thovidSend({type:"signal",to:peer,data:{type:"ice",candidate:e.candidate}});};}
-async function thovidConnectPublisher(){const token=await currentUser.getIdToken();let response;
- try{response=await fetch(THOVID_LIVE_SERVER+"/live/create",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:JSON.stringify({channelId:currentChannelId,title:thovidLiveTitle})});}
- catch(e){throw new Error("Live server unreachable. Deploy the live endpoints and allow CORS: "+e.message);}
- const data=await response.json().catch(()=>({}));if(!response.ok||!data.success)throw new Error(data.error||"Live server HTTP "+response.status);
- thovidLiveId=data.streamId;thovidLiveSocket=new WebSocket(thovidWsUrl());
- await new Promise((resolve,reject)=>{let ready=false;const timeout=setTimeout(()=>{if(!ready)reject(new Error("Live server websocket timed out."));},16000);
- thovidLiveSocket.onopen=()=>thovidSend({type:"auth",token,streamId:thovidLiveId,role:"publisher"});
- thovidLiveSocket.onmessage=async ev=>{let m;try{m=JSON.parse(ev.data)}catch{return;}
- if(m.type==="ready"){ready=true;clearTimeout(timeout);resolve();}
- else if(m.type==="error"){if(!ready){clearTimeout(timeout);reject(new Error(m.message||"Live server error"));}else showMessage(m.message||"Live server error");}
- else if(m.type==="viewer-joined"){try{await thovidCreatePublisherPeer(m.clientId);}catch(e){console.warn(e);}}
- else if(m.type==="viewer-left"){const pc=thovidPublisherPeers.get(m.clientId);pc?.close();thovidPublisherPeers.delete(m.clientId);}
- else if(m.type==="signal"){const pc=thovidPublisherPeers.get(m.from);if(!pc)return;try{if(m.data?.type==="answer")await pc.setRemoteDescription({type:"answer",sdp:m.data.sdp});else if(m.data?.type==="ice")await pc.addIceCandidate(m.data.candidate);}catch(e){console.warn("WebRTC signal",e);}}
- else if(m.type==="stream-ended")thovidStatus("Live server ended stream.");};
- thovidLiveSocket.onerror=()=>{if(!ready){clearTimeout(timeout);reject(new Error("WebSocket connection failed."));}else thovidStatus("Connection to live server interrupted.");};
- thovidLiveSocket.onclose=()=>{if(thovidRecorder?.state==="recording")thovidStatus("Live server disconnected. End stream to save recording.");};});}
+async function thovidConnectPublisher(){
+ const token=await currentUser.getIdToken();
+ let lastError=null;
+ for(const server of THOVID_LIVE_SERVERS){
+  let response=null,createdStreamId=null,socket=null;
+  try{
+   thovidStatus("Connecting to live server: "+server);
+   response=await fetch(server+"/live/create",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:JSON.stringify({channelId:currentChannelId,title:thovidLiveTitle})});
+   const data=await response.json().catch(()=>({}));
+   if(!response.ok||!data.success||!data.streamId)throw new Error(data.error||"HTTP "+response.status+" from "+server);
+   createdStreamId=data.streamId;
+   socket=new WebSocket(server.replace(/^http/,"ws")+"/live-signal");
+   await new Promise((resolve,reject)=>{
+    let ready=false;
+    const timeout=setTimeout(()=>{if(!ready)reject(new Error("WebSocket timed out on "+server));},16000);
+    socket.onopen=()=>socket.send(JSON.stringify({type:"auth",token,streamId:createdStreamId,role:"publisher"}));
+    socket.onmessage=async ev=>{
+     let m;try{m=JSON.parse(ev.data)}catch{return;}
+     if(m.type==="ready"){ready=true;clearTimeout(timeout);thovidLiveServer=server;thovidLiveId=createdStreamId;thovidLiveSocket=socket;resolve();}
+     else if(m.type==="error"){if(!ready){clearTimeout(timeout);reject(new Error(m.message||"Live server authentication failed"));}else showMessage(m.message||"Live server error");}
+     else if(m.type==="viewer-joined"){try{await thovidCreatePublisherPeer(m.clientId);}catch(e){console.warn(e);}}
+     else if(m.type==="viewer-left"){const pc=thovidPublisherPeers.get(m.clientId);pc?.close();thovidPublisherPeers.delete(m.clientId);}
+     else if(m.type==="signal"){const pc=thovidPublisherPeers.get(m.from);if(!pc)return;try{if(m.data?.type==="answer")await pc.setRemoteDescription({type:"answer",sdp:m.data.sdp});else if(m.data?.type==="ice")await pc.addIceCandidate(m.data.candidate);}catch(e){console.warn("WebRTC signal",e);}}
+     else if(m.type==="stream-ended")thovidStatus("Live server ended stream.");
+    };
+    socket.onerror=()=>{if(!ready){clearTimeout(timeout);reject(new Error("WebSocket connection failed on "+server));}else thovidStatus("Connection to live server interrupted.");};
+    socket.onclose=()=>{if(!ready){clearTimeout(timeout);reject(new Error("WebSocket closed before authentication on "+server));}else if(thovidRecorder?.state==="recording")thovidStatus("Live server disconnected. End stream to save recording.");};
+   });
+   console.info("ThoVid livestream connected to",server);
+   return;
+  }catch(e){
+   lastError=e;try{socket?.close();}catch{}
+   console.warn("ThoVid livestream server failed; trying backup:",server,e);
+  }
+ }
+ throw new Error("All 4 livestream servers failed. Last error: "+(lastError?.message||"Unknown connection error")+". Check that all four Render services are running and allow CORS from https://thovid58.github.io.");
+}
 async function thovidCreatePublisherPeer(viewerId){if(!viewerId||thovidPublisherPeers.has(viewerId)||!thovidLiveStream)return;const pc=new RTCPeerConnection({iceServers:THOVID_ICE_SERVERS});thovidPublisherPeers.set(viewerId,pc);thovidLiveStream.getTracks().forEach(t=>pc.addTrack(t,thovidLiveStream));thovidAttachIce(pc,viewerId);const offer=await pc.createOffer();await pc.setLocalDescription(offer);thovidSend({type:"signal",to:viewerId,data:{type:"offer",sdp:offer.sdp}});}
-async function thovidJoinViewer(streamId){thovidClosePeers();thovidCloseSocket();thovidStopChat();thovidLiveId=streamId;thovid$("live-viewer-video").srcObject=null;thovid$("live-viewer-status").textContent="Connecting to live stream...";
- try{const [token,infoRes]=await Promise.all([currentUser.getIdToken(),fetch(THOVID_LIVE_SERVER+"/live/status/"+encodeURIComponent(streamId))]);const info=await infoRes.json();if(!infoRes.ok)throw new Error(info.error||"This stream is offline.");thovid$("live-viewer-title").textContent=info.title||"Live stream";
- thovidStartChat(streamId);thovidLiveSocket=new WebSocket(thovidWsUrl());
- thovidLiveSocket.onopen=()=>thovidSend({type:"auth",token,streamId,role:"viewer"});
- thovidLiveSocket.onmessage=async ev=>{let m;try{m=JSON.parse(ev.data)}catch{return;}
- if(m.type==="ready"){thovidSend({type:"request-offer"});thovid$("live-viewer-status").textContent="Connected. Waiting for the live picture...";}
- else if(m.type==="signal"&&m.data?.type==="offer"){
- try{thovidViewerPeer?.close();thovidViewerPeer=new RTCPeerConnection({iceServers:THOVID_ICE_SERVERS});thovidCurrentViewerId=m.from;const pc=thovidViewerPeer;pc.ontrack=e=>{const player=thovid$("live-viewer-video");player.srcObject=e.streams[0]||new MediaStream([e.track]);player.play().catch(()=>{thovid$("live-viewer-status").textContent="Press play to watch with sound.";});thovid$("live-viewer-status").textContent="Watching live";};
- pc.onconnectionstatechange=()=>{if(pc.connectionState==="failed")thovid$("live-viewer-status").textContent="Peer connection failed. A TURN server may be needed on this network.";};
- thovidAttachIce(pc,m.from);await pc.setRemoteDescription({type:"offer",sdp:m.data.sdp});for(const ice of thovidPendingIce.splice(0))await pc.addIceCandidate(ice).catch(()=>{});const answer=await pc.createAnswer();await pc.setLocalDescription(answer);thovidSend({type:"signal",to:m.from,data:{type:"answer",sdp:answer.sdp}});
- }catch(e){thovid$("live-viewer-status").textContent="Playback connection error: "+e.message;}}
- else if(m.type==="signal"&&m.data?.type==="ice"){if(thovidViewerPeer?.remoteDescription)await thovidViewerPeer.addIceCandidate(m.data.candidate).catch(()=>{});else thovidPendingIce.push(m.data.candidate);}
- else if(m.type==="stream-ended"){thovid$("live-viewer-status").textContent="Stream ended.";thovid$("live-viewer-video").srcObject=null;thovidStopChat();}
- else if(m.type==="error")thovid$("live-viewer-status").textContent=m.message||"Live connection error";};
- thovidLiveSocket.onerror=()=>thovid$("live-viewer-status").textContent="Could not connect to livestream server.";
- }catch(e){thovid$("live-viewer-status").textContent="Unable to watch: "+e.message;}}
+async function thovidJoinViewer(streamId){
+ thovidClosePeers();thovidCloseSocket();thovidStopChat();thovidLiveId=streamId;thovid$("live-viewer-video").srcObject=null;thovid$("live-viewer-status").textContent="Connecting to live stream...";
+ try{
+  const token=await currentUser.getIdToken();
+  const metaSnap=await get(ref(db,"activeLiveStreams/"+streamId));
+  const liveMeta=metaSnap.val()||{};
+  const preferred=String(liveMeta.liveServer||"").replace(/\/+$/,"");
+  const servers=[preferred,...THOVID_LIVE_SERVERS].filter((v,i,a)=>v&&a.indexOf(v)===i);
+  let connected=false,lastError=null;
+  for(const server of servers){
+   let socket=null;
+   try{
+    const infoRes=await fetch(server+"/live/status/"+encodeURIComponent(streamId));
+    const info=await infoRes.json().catch(()=>({}));
+    if(!infoRes.ok)throw new Error(info.error||"Stream unavailable on "+server);
+    thovid$("live-viewer-title").textContent=info.title||liveMeta.title||"Live stream";
+    socket=new WebSocket(server.replace(/^http/,"ws")+"/live-signal");
+    await new Promise((resolve,reject)=>{
+     let ready=false;
+     const timeout=setTimeout(()=>{if(!ready)reject(new Error("WebSocket timed out on "+server));},16000);
+     socket.onopen=()=>socket.send(JSON.stringify({type:"auth",token,streamId,role:"viewer"}));
+     socket.onmessage=async ev=>{
+      let m;try{m=JSON.parse(ev.data)}catch{return;}
+      if(m.type==="ready"){
+       ready=true;clearTimeout(timeout);thovidLiveServer=server;thovidLiveSocket=socket;
+       thovidStartChat(streamId);thovid$("live-viewer-status").textContent="Connected. Waiting for the live picture...";
+       thovidSend({type:"request-offer"});resolve();
+      }else if(m.type==="signal"&&m.data?.type==="offer"){
+       try{thovidViewerPeer?.close();thovidViewerPeer=new RTCPeerConnection({iceServers:THOVID_ICE_SERVERS});thovidCurrentViewerId=m.from;const pc=thovidViewerPeer;pc.ontrack=e=>{const player=thovid$("live-viewer-video");player.srcObject=e.streams[0]||new MediaStream([e.track]);player.play().catch(()=>{thovid$("live-viewer-status").textContent="Press play to watch with sound.";});thovid$("live-viewer-status").textContent="Watching live";};
+        pc.onconnectionstatechange=()=>{if(pc.connectionState==="failed")thovid$("live-viewer-status").textContent="Peer connection failed. A TURN server may be needed on this network.";};
+        thovidAttachIce(pc,m.from);await pc.setRemoteDescription({type:"offer",sdp:m.data.sdp});for(const ice of thovidPendingIce.splice(0))await pc.addIceCandidate(ice).catch(()=>{});const answer=await pc.createAnswer();await pc.setLocalDescription(answer);thovidSend({type:"signal",to:m.from,data:{type:"answer",sdp:answer.sdp}});
+       }catch(e){thovid$("live-viewer-status").textContent="Playback connection error: "+e.message;}
+      }else if(m.type==="signal"&&m.data?.type==="ice"){if(thovidViewerPeer?.remoteDescription)await thovidViewerPeer.addIceCandidate(m.data.candidate).catch(()=>{});else thovidPendingIce.push(m.data.candidate);}
+      else if(m.type==="stream-ended"){thovid$("live-viewer-status").textContent="Stream ended.";thovid$("live-viewer-video").srcObject=null;thovidStopChat();}
+      else if(m.type==="error")thovid$("live-viewer-status").textContent=m.message||"Live connection error";
+     };
+     socket.onerror=()=>{if(!ready){clearTimeout(timeout);reject(new Error("WebSocket connection failed on "+server));}};
+     socket.onclose=()=>{if(!ready){clearTimeout(timeout);reject(new Error("WebSocket closed before authentication on "+server));}};
+    });
+    connected=true;break;
+   }catch(e){lastError=e;try{socket?.close();}catch{}console.warn("ThoVid viewer server failed; trying backup:",server,e);}
+  }
+  if(!connected)throw lastError||new Error("No livestream server could be reached.");
+ }catch(e){thovid$("live-viewer-status").textContent="Unable to watch: "+e.message;}
+}
 async function thovidLoadThumbnail(file){if(!file){thovidThumbnail="";thovid$("live-thumbnail-preview").style.display="none";return;}
  if(!file.type.startsWith("image/")){showMessage("Select an image file for the thumbnail.");return;}
  const img=new Image();const url=URL.createObjectURL(file);try{await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url;});const canvas=document.createElement("canvas");canvas.width=640;canvas.height=360;canvas.getContext("2d").drawImage(img,0,0,640,360);thovidThumbnail=canvas.toDataURL("image/jpeg",.65);if(thovidThumbnail.length>180000)throw new Error("Thumbnail is too large. Try a smaller image.");thovid$("live-thumbnail-preview").src=thovidThumbnail;thovid$("live-thumbnail-preview").style.display="block";}catch(e){thovidThumbnail="";showMessage(e.message||"Could not read thumbnail.");}finally{URL.revokeObjectURL(url);}}
@@ -11404,7 +11460,7 @@ thovid$("live-start-recording").addEventListener("click",async()=>{if(!currentUs
  if(typeof MediaRecorder==="undefined")return showMessage("This browser does not support recording. Try Chrome or Edge.");thovidLiveBusy=true;thovidStatus("Connecting to live server...");thovidUpdateControls();
  try{await thovidConnectPublisher();const mime=["video/webm;codecs=vp8,opus","video/webm;codecs=vp9,opus","video/webm"].find(t=>MediaRecorder.isTypeSupported(t));thovidRecordedChunks=[];
  thovidRecorder=mime?new MediaRecorder(thovidLiveStream,{mimeType:mime}):new MediaRecorder(thovidLiveStream);thovidRecorder.ondataavailable=e=>{if(e.data?.size)thovidRecordedChunks.push(e.data);};thovidRecorder.onstop=()=>thovidSaveRecording();thovidRecorder.onerror=e=>console.error("Live recorder",e);thovidRecorder.start(1000);thovidLiveStartedAt=Date.now();
- await set(ref(db,"activeLiveStreams/"+thovidLiveId),{active:true,title:thovidLiveTitle,description:thovidLiveDescription,thumbnail:thovidThumbnail||"",ownerId:currentUser.uid,channelId:currentChannelId,startedAt:Date.now()});
+ await set(ref(db,"activeLiveStreams/"+thovidLiveId),{active:true,title:thovidLiveTitle,description:thovidLiveDescription,thumbnail:thovidThumbnail||"",ownerId:currentUser.uid,channelId:currentChannelId,startedAt:Date.now(),liveServer:thovidLiveServer});
  thovid$("live-share-area").style.display="block";thovid$("live-share-link").value=location.origin+location.pathname+"?live="+encodeURIComponent(thovidLiveId);thovid$("live-stop-recording").disabled=false;thovidStartChat(thovidLiveId);thovidStatus("Broadcasting live! Your stream appears under Live now.",true);
  }catch(e){console.error(e);if(thovidRecorder?.state==="recording")thovidRecorder.stop();thovidRecorder=null;thovidCloseSocket();thovidClosePeers();thovidStatus("Could not go live: "+e.message);showMessage(e.message);if(thovidLiveId){remove(ref(db,"activeLiveStreams/"+thovidLiveId)).catch(()=>{});thovidLiveId=null;}}
  finally{thovidLiveBusy=false;thovidUpdateControls();}});
