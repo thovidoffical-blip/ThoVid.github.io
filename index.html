@@ -2077,11 +2077,15 @@ import{getDatabase,ref,set,push,onValue,update,get,remove,runTransaction,query,o
 
 const firebaseConfig={apiKey:"AIzaSyC6Nkehr8eBc--wRbMbZIkxsn2hXZBsF1c",authDomain:"d-game-143eb.firebaseapp.com",databaseURL:"https://d-game-143eb-default-rtdb.firebaseio.com",projectId:"d-game-143eb",storageBucket:"d-game-143eb.appspot.com",messagingSenderId:"649556685021",appId:"1:649556685021:web:e541bdbbae5e0cce436b34"};
 
-// Use the one confirmed working Render deployment. The other three URLs
-// currently fail CORS preflight and must not be retried by the browser.
+// ThoVid media server failover: one primary plus four backups.
+// Order matters: try the primary first, then each backup in sequence.
+// Every server must support the same upload/media API and allow this site's CORS origin.
+// Use the one backend that has the updated MP4, Drive, CORS and live routes.
+// Re-enable additional hosts only after deploying the identical server.js and
+// configuring the same Google Drive account and Firebase service account on them.
 const UPLOAD_SERVERS=[
-    "https://thovidserver4.onrender.com"
-];
+    "https://thovidserver5.onrender.com"
+].map(url=>url.replace(/\/+$/,""));
 
 
 async function uploadToAvailableServer(form, onProgress) {
@@ -7305,12 +7309,8 @@ function createPlayer(video) {
         return player;
     }
 
-    const availableServers = [
-        "https://thovid-server.onrender.com",
-        "https://thoserver-2.onrender.com",
-        "https://thovidserver-3.onrender.com",
-        "https://thovidserver4.onrender.com"
-    ].map(url => url.replace(/\/+$/, ""));
+    // Reuse the shared five-server media failover list for playback.
+    const availableServers = UPLOAD_SERVERS;
 
     const originalServer = String(video.serverBase || "").replace(/\/+$/, "");
     const originalVideoUrl = String(video.videoUrl || "").trim();
@@ -11627,16 +11627,20 @@ $("trendly-back")?.addEventListener("click",()=>showMainView("app"));
 document.querySelectorAll("[data-trendly-sort]").forEach(button=>button.addEventListener("click",()=>openTrendly(button.dataset.trendlySort)));
 
 
-// ThoVid livestream failover: one primary Render server followed by three backups.
+// ThoVid livestream failover: one primary Render server followed by four backups.
 // The first server is tried first; the next server is used if a request or websocket fails.
+// Keep livestream signaling on the same verified primary service as uploads.
 const THOVID_LIVE_SERVERS=[
- "https://thovid-server.onrender.com",
- "https://thoserver-2.onrender.com",
- "https://thovidserver-3.onrender.com",
- "https://thovidserver4.onrender.com"
+ "https://thovidserver5.onrender.com"
 ].map(url=>url.replace(/\/+$/,""));
 let thovidLiveServer=THOVID_LIVE_SERVERS[0];
 const THOVID_ICE_SERVERS=[{urls:"stun:stun.l.google.com:19302"}];
+ let thovidIceServers=THOVID_ICE_SERVERS;
+ async function thovidLoadIceServers(server){
+  try{const response=await fetch(server+"/live/config",{cache:"no-store"});if(!response.ok)return;
+   const config=await response.json();if(Array.isArray(config.iceServers)&&config.iceServers.length)thovidIceServers=config.iceServers;
+  }catch(e){console.warn("Could not load live ICE configuration; using public STUN:",e);}
+ }
 let thovidLiveStream=null,thovidRecorder=null,thovidRecordedChunks=[],thovidLiveStartedAt=0;
 let thovidLiveId=null,thovidLiveSocket=null,thovidLiveBusy=false,thovidLiveMode="";
 let thovidCameraSource=null,thovidScreenSource=null,thovidMicSource=null,thovidCanvas=null,thovidCanvasContext=null;
@@ -11726,7 +11730,7 @@ function thovidMakeFallbackLiveThumbnail(){
 }
 async function thovidConnectPublisher(){
  // A file:// page has origin "null" and cannot pass authenticated CORS preflight.
- // Stop here with a useful message instead of generating four misleading failures.
+ // Stop here with a useful message instead of generating five misleading failures.
  if(location.origin==="null"){
   throw new Error("Open ThoVid from its HTTPS website (for example https://thovid58.github.io), not by double-clicking the HTML file. Local file pages have origin 'null' and livestream servers reject them.");
  }
@@ -11735,6 +11739,7 @@ async function thovidConnectPublisher(){
  for(const server of THOVID_LIVE_SERVERS){
   let response=null,createdStreamId=null,socket=null;
   try{
+   await thovidLoadIceServers(server);
    thovidStatus("Connecting to live server: "+server);
    response=await fetch(server+"/live/create",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+token},body:JSON.stringify({channelId:currentChannelId,title:thovidLiveTitle})});
    const data=await response.json().catch(()=>({}));
@@ -11751,7 +11756,10 @@ async function thovidConnectPublisher(){
      else if(m.type==="error"){if(!ready){clearTimeout(timeout);reject(new Error(m.message||"Live server authentication failed"));}else showMessage(m.message||"Live server error");}
      else if(m.type==="viewer-joined"){try{await thovidCreatePublisherPeer(m.clientId);}catch(e){console.warn(e);}}
      else if(m.type==="viewer-left"){const pc=thovidPublisherPeers.get(m.clientId);pc?.close();thovidPublisherPeers.delete(m.clientId);}
-     else if(m.type==="signal"){const pc=thovidPublisherPeers.get(m.from);if(!pc)return;try{if(m.data?.type==="answer")await pc.setRemoteDescription({type:"answer",sdp:m.data.sdp});else if(m.data?.type==="ice")await pc.addIceCandidate(m.data.candidate);}catch(e){console.warn("WebRTC signal",e);}}
+     else if(m.type==="signal"){const pc=thovidPublisherPeers.get(m.from);if(!pc)return;try{
+       if(m.data?.type==="answer"){await pc.setRemoteDescription({type:"answer",sdp:m.data.sdp});for(const ice of (pc.__pendingRemoteIce||[]))await pc.addIceCandidate(ice).catch(()=>{});pc.__pendingRemoteIce=[];}
+       else if(m.data?.type==="ice"){if(pc.remoteDescription)await pc.addIceCandidate(m.data.candidate).catch(()=>{});else (pc.__pendingRemoteIce??=[]).push(m.data.candidate);}
+      }catch(e){console.warn("WebRTC signal",e);}}
      else if(m.type==="stream-ended")thovidStatus("Live server ended stream.");
     };
     socket.onerror=()=>{if(!ready){clearTimeout(timeout);reject(new Error("WebSocket connection failed on "+server));}else thovidStatus("Connection to live server interrupted.");};
@@ -11765,9 +11773,9 @@ async function thovidConnectPublisher(){
   }
  }
  const detail=lastError?.message||"Unknown connection error";
- throw new Error("Could not connect to any of the 4 livestream servers. Last error: "+detail+". This cannot be fixed in the HTML alone: each Render server must return Access-Control-Allow-Origin for https://thovid58.github.io and allow POST plus the Authorization and Content-Type headers for OPTIONS preflight. Check that all four services are running.");
+ throw new Error("Could not connect to any of the 5 livestream servers. Last error: "+detail+". This cannot be fixed in the HTML alone: each Render server must return Access-Control-Allow-Origin for https://thovid58.github.io and allow POST plus the Authorization and Content-Type headers for OPTIONS preflight. Check that all five services are running.");
 }
-async function thovidCreatePublisherPeer(viewerId){if(!viewerId||thovidPublisherPeers.has(viewerId)||!thovidLiveStream)return;const pc=new RTCPeerConnection({iceServers:THOVID_ICE_SERVERS});thovidPublisherPeers.set(viewerId,pc);thovidLiveStream.getTracks().forEach(t=>pc.addTrack(t,thovidLiveStream));thovidAttachIce(pc,viewerId);const offer=await pc.createOffer();await pc.setLocalDescription(offer);thovidSend({type:"signal",to:viewerId,data:{type:"offer",sdp:offer.sdp}});}
+async function thovidCreatePublisherPeer(viewerId){if(!viewerId||thovidPublisherPeers.has(viewerId)||!thovidLiveStream)return;const pc=new RTCPeerConnection({iceServers:thovidIceServers});thovidPublisherPeers.set(viewerId,pc);thovidLiveStream.getTracks().forEach(t=>pc.addTrack(t,thovidLiveStream));thovidAttachIce(pc,viewerId);const offer=await pc.createOffer();await pc.setLocalDescription(offer);thovidSend({type:"signal",to:viewerId,data:{type:"offer",sdp:offer.sdp}});}
 async function thovidJoinViewer(streamId){
  thovidClosePeers();thovidCloseSocket();thovidStopChat();thovidLiveId=streamId;thovid$("live-viewer-video").srcObject=null;thovid$("live-viewer-status").textContent="Connecting to live stream...";
  try{
@@ -11780,6 +11788,7 @@ async function thovidJoinViewer(streamId){
   for(const server of servers){
    let socket=null;
    try{
+    await thovidLoadIceServers(server);
     const infoRes=await fetch(server+"/live/status/"+encodeURIComponent(streamId));
     const info=await infoRes.json().catch(()=>({}));
     if(!infoRes.ok)throw new Error(info.error||"Stream unavailable on "+server);
@@ -11796,7 +11805,7 @@ async function thovidJoinViewer(streamId){
        thovidStartChat(streamId);thovid$("live-viewer-status").textContent="Connected. Waiting for the live picture...";
        thovidSend({type:"request-offer"});resolve();
       }else if(m.type==="signal"&&m.data?.type==="offer"){
-       try{thovidViewerPeer?.close();thovidViewerPeer=new RTCPeerConnection({iceServers:THOVID_ICE_SERVERS});thovidCurrentViewerId=m.from;const pc=thovidViewerPeer;pc.ontrack=e=>{const player=thovid$("live-viewer-video");player.srcObject=e.streams[0]||new MediaStream([e.track]);player.play().catch(()=>{thovid$("live-viewer-status").textContent="Press play to watch with sound.";});thovid$("live-viewer-status").textContent="Watching live";};
+       try{thovidViewerPeer?.close();thovidViewerPeer=new RTCPeerConnection({iceServers:thovidIceServers});thovidCurrentViewerId=m.from;const pc=thovidViewerPeer;pc.ontrack=e=>{const player=thovid$("live-viewer-video");player.autoplay=true;player.playsInline=true;player.muted=false;player.srcObject=e.streams?.[0]||new MediaStream([e.track]);player.play().then(()=>{thovid$("live-viewer-status").textContent="Watching live";}).catch(()=>{thovid$("live-viewer-status").textContent="Connected. Press play to start the video.";});};
         pc.onconnectionstatechange=()=>{if(pc.connectionState==="failed")thovid$("live-viewer-status").textContent="Peer connection failed. A TURN server may be needed on this network.";};
         thovidAttachIce(pc,m.from);await pc.setRemoteDescription({type:"offer",sdp:m.data.sdp});for(const ice of thovidPendingIce.splice(0))await pc.addIceCandidate(ice).catch(()=>{});const answer=await pc.createAnswer();await pc.setLocalDescription(answer);thovidSend({type:"signal",to:m.from,data:{type:"answer",sdp:answer.sdp}});
        }catch(e){thovid$("live-viewer-status").textContent="Playback connection error: "+e.message;}
